@@ -1,0 +1,9 @@
+# Your ONT details stay on your machine
+ont.json
+*.password
+*.pass
+__pycache__/
+*.egg-info/
+build/
+dist/
+.venv/
