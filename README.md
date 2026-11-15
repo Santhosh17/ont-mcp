@@ -1,10 +1,8 @@
 <div align="center">
 
-# 🔦 digisol-mcp
+<img src="assets/banner.svg" alt="digisol-mcp: talk to your fibre ONT in plain English" width="100%">
 
-### Talk to your fibre ONT in plain English.
-
-**An [MCP](https://modelcontextprotocol.io) server that lets Claude, Cursor, VS Code and other AI assistants read and safely configure Digisol fibre ONTs.**
+**An [MCP](https://modelcontextprotocol.io) server that lets Claude, Cursor, VS Code and other AI assistants read and safely configure Digisol fibre ONTs, or run 100% offline with a local model.**
 
 [![tests](https://github.com/Santhosh17/digisol-mcp/actions/workflows/test.yml/badge.svg)](https://github.com/Santhosh17/digisol-mcp/actions/workflows/test.yml)
 ![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-3776AB?logo=python&logoColor=white)
@@ -13,7 +11,7 @@
 ![macOS · Linux · Windows](https://img.shields.io/badge/runs%20on-macOS%20%C2%B7%20Linux%20%C2%B7%20Windows-lightgrey)
 [![MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-[Quick start](#-quick-start-3-minutes) · [What you can ask](#-what-you-can-ask) · [Safety](#-safety-built-in-not-bolted-on) · [Configuration](#%EF%B8%8F-configuration) · [Troubleshooting](#-troubleshooting)
+[Quick start](#-quick-start-3-minutes) · [What you can ask](#-what-you-can-ask) · [Local models](#-run-it-100-locally) · [Safety](#-safety-built-in-not-bolted-on) · [Configuration](#%EF%B8%8F-configuration) · [Troubleshooting](#-troubleshooting)
 
 </div>
 
@@ -41,6 +39,7 @@ No web page with a captcha. No vendor app. No CLI manuals. **You ask, your assis
 | 🛡️ **You approve every change** | Reads are free. Every change pops up a dialog on *your* screen, and you have to type a word to allow it. The AI cannot click it for you. |
 | 📦 **Zero dependencies** | One Python file, standard library only. No `npm install`, no Docker, nothing to break. |
 | 🔐 **Your secrets stay yours** | Your ONT's IP and password live in *your* config: Keychain, a password file or env vars. Never in this repo. |
+| 🏡 **Runs 100% offline** | Pair it with a local model in LM Studio or Ollama, and nothing leaves your home network. |
 | 🏠 **Several ONTs** | Home, office, parents' house: one server, one config, pick by name. |
 | 🐢 **Gentle on the hardware** | ONTs have tiny memory. Sessions are paced and short, so the box stays healthy. |
 
@@ -150,6 +149,25 @@ Same JSON as Claude Desktop, under `"mcpServers"`.
 </details>
 
 <details>
+<summary><b>LM Studio</b> (local models, <code>~/.lmstudio/mcp.json</code>)</summary>
+
+Program → Install → Edit mcp.json:
+
+```json
+{
+  "mcpServers": {
+    "digisol": {
+      "command": "python3",
+      "args": ["/full/path/to/digisol-mcp/digisol_mcp.py"],
+      "env": { "ONT_HOST": "192.168.1.1", "ONT_KEYCHAIN": "digisol-ont" }
+    }
+  }
+}
+```
+Desktop apps often don't see `uvx` on their PATH, so this uses a clone and `python3`. See [Run it 100% locally](#-run-it-100-locally).
+</details>
+
+<details>
 <summary><b>No uv? Use plain Python</b></summary>
 
 ```bash
@@ -183,6 +201,14 @@ That's it. Ask your assistant *"What's the status of my ONT?"* 🎉
 | *"What firmware am I running?"* | reads `status` |
 | *"Explain my ONT's routing table like I'm five"* | reads `route` and explains it |
 | *"Reboot the ONT"* | dialog: you must type **REBOOT** |
+
+## 🏡 Run it 100% locally
+
+Prefer your ONT's data never leaves the house? MCP works with any model, so pair this server with a local one and **no question, answer or ONT output goes to the cloud.**
+
+- **Apps:** [LM Studio](https://lmstudio.ai) (config in [Quick start](#3--add-it-to-your-ai-app)), or any MCP app that runs local models: Jan, Goose, Cline, Continue. Open WebUI needs an HTTP bridge such as `mcpo`.
+- **Models:** pick one that's good at tool calling, ideally **14B or larger** (Qwen 3, Mistral Small, gpt-oss-20b). Tested with **Qwen3.8 27B in LM Studio**: it found the right tools by itself and checked settings before proposing changes. Models under ~7B often call the wrong tool.
+- **Safety doesn't depend on the model.** Command checks and the approval dialog run in the server, so even a confused model can't change anything without you. Trying a small model? Add `"ONT_READ_ONLY": "1"` for extra peace of mind.
 
 ## 🛡️ Safety: built in, not bolted on
 
