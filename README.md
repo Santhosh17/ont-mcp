@@ -6,7 +6,7 @@
 
 **An [MCP](https://modelcontextprotocol.io) server that lets Claude, Cursor, VS Code and other AI assistants read and safely configure Digisol fibre ONTs.**
 
-[![tests](https://github.com/YOUR-USERNAME/digisol-mcp/actions/workflows/test.yml/badge.svg)](https://github.com/YOUR-USERNAME/digisol-mcp/actions/workflows/test.yml)
+[![tests](https://github.com/Santhosh17/digisol-mcp/actions/workflows/test.yml/badge.svg)](https://github.com/Santhosh17/digisol-mcp/actions/workflows/test.yml)
 ![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-3776AB?logo=python&logoColor=white)
 ![Zero dependencies](https://img.shields.io/badge/dependencies-zero-brightgreen)
 ![One file](https://img.shields.io/badge/server-one%20file-blueviolet)
@@ -105,7 +105,7 @@ Settings → Developer → Edit Config, then add:
   "mcpServers": {
     "digisol": {
       "command": "uvx",
-      "args": ["--from", "git+https://github.com/YOUR-USERNAME/digisol-mcp", "digisol-mcp"],
+      "args": ["--from", "git+https://github.com/Santhosh17/digisol-mcp", "digisol-mcp"],
       "env": {
         "ONT_HOST": "192.168.1.1",
         "ONT_KEYCHAIN": "digisol-ont"
@@ -123,7 +123,7 @@ Restart Claude Desktop.
 ```bash
 claude mcp add digisol --scope user \
   -e ONT_HOST=192.168.1.1 -e ONT_KEYCHAIN=digisol-ont \
-  -- uvx --from git+https://github.com/YOUR-USERNAME/digisol-mcp digisol-mcp
+  -- uvx --from git+https://github.com/Santhosh17/digisol-mcp digisol-mcp
 ```
 </details>
 
@@ -141,7 +141,7 @@ Same JSON as Claude Desktop, under `"mcpServers"`.
   "servers": {
     "digisol": {
       "command": "uvx",
-      "args": ["--from", "git+https://github.com/YOUR-USERNAME/digisol-mcp", "digisol-mcp"],
+      "args": ["--from", "git+https://github.com/Santhosh17/digisol-mcp", "digisol-mcp"],
       "env": { "ONT_HOST": "192.168.1.1", "ONT_KEYCHAIN": "digisol-ont" }
     }
   }
@@ -153,7 +153,7 @@ Same JSON as Claude Desktop, under `"mcpServers"`.
 <summary><b>No uv? Use plain Python</b></summary>
 
 ```bash
-git clone https://github.com/YOUR-USERNAME/digisol-mcp
+git clone https://github.com/Santhosh17/digisol-mcp
 ```
 Then use `"command": "python3"` and `"args": ["/full/path/to/digisol-mcp/digisol_mcp.py"]`.
 (On Windows: `"command": "python"`.)
@@ -162,7 +162,7 @@ Then use `"command": "python3"` and `"args": ["/full/path/to/digisol-mcp/digisol
 ### ✅ Check it
 
 ```bash
-ONT_HOST=192.168.1.1 ONT_KEYCHAIN=digisol-ont uvx --from git+https://github.com/YOUR-USERNAME/digisol-mcp digisol-mcp --check
+ONT_HOST=192.168.1.1 ONT_KEYCHAIN=digisol-ont uvx --from git+https://github.com/Santhosh17/digisol-mcp digisol-mcp --check
 ```
 
 ```text
