@@ -10,7 +10,7 @@ import textwrap
 import unittest
 from unittest import mock
 
-import digisol_mcp as m
+import ont_mcp as m
 
 REAL_HELP = ("command error!\n\nCommands after \"show\" are:\n\n"
              "    acl                       Access control list            \n"
@@ -19,7 +19,7 @@ REAL_HELP = ("command error!\n\nCommands after \"show\" are:\n\n"
 
 FAKE_SSH = textwrap.dedent("""\
     #!%s
-    # Pretends to be ssh + a Digisol CLI. Checks the password via $SSH_ASKPASS like real ssh does.
+    # Pretends to be ssh + an ONT CLI. Checks the password via $SSH_ASKPASS like real ssh does.
     import os, subprocess, sys
     pw = subprocess.run([os.environ["SSH_ASKPASS"], "Password:"], capture_output=True, text=True).stdout
     if pw != os.environ["FAKE_ONT_PASSWORD"]:
@@ -150,7 +150,7 @@ class Parsing(unittest.TestCase):
 
 class Protocol(unittest.TestCase):
     def test_handshake_and_tools(self):
-        self.assertEqual(m.handle({"method": "initialize", "params": {}})["serverInfo"]["name"], "digisol-mcp")
+        self.assertEqual(m.handle({"method": "initialize", "params": {}})["serverInfo"]["name"], "ont-mcp")
         names = [t["name"] for t in m.handle({"method": "tools/list"})["tools"]]
         self.assertEqual(names, ["ont_show", "ont_help", "ont_run"])
 

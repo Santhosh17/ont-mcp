@@ -1,17 +1,22 @@
 <div align="center">
 
-<img src="assets/banner.svg" alt="digisol-mcp: talk to your fibre ONT in plain English" width="100%">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/banner-dark.svg">
+  <img src="assets/banner-light.svg" alt="ONT MCP: your fibre box, now fluent in AI" width="100%">
+</picture>
 
-**An [MCP](https://modelcontextprotocol.io) server that lets Claude, Cursor, VS Code and other AI assistants read and safely configure Digisol fibre ONTs, or run 100% offline with a local model.**
+**An [MCP](https://modelcontextprotocol.io) server that lets Claude, Cursor, VS Code and other AI assistants read and safely configure fibre ONTs, or run 100% offline with a local model.**
 
-[![tests](https://github.com/Santhosh17/digisol-mcp/actions/workflows/test.yml/badge.svg)](https://github.com/Santhosh17/digisol-mcp/actions/workflows/test.yml)
+**Tested on:** Digisol DG-GR6011 (EPON) · [see all tested hardware](#-tested-hardware)
+
+[![tests](https://github.com/Santhosh17/ont-mcp/actions/workflows/test.yml/badge.svg)](https://github.com/Santhosh17/ont-mcp/actions/workflows/test.yml)
 ![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-3776AB?logo=python&logoColor=white)
 ![Zero dependencies](https://img.shields.io/badge/dependencies-zero-brightgreen)
 ![One file](https://img.shields.io/badge/server-one%20file-blueviolet)
 ![macOS · Linux · Windows](https://img.shields.io/badge/runs%20on-macOS%20%C2%B7%20Linux%20%C2%B7%20Windows-lightgrey)
 [![MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-[Quick start](#-quick-start-3-minutes) · [What you can ask](#-what-you-can-ask) · [Local models](#-run-it-100-locally) · [Safety](#-safety-built-in-not-bolted-on) · [Configuration](#%EF%B8%8F-configuration) · [Troubleshooting](#-troubleshooting)
+[Quick start](#-quick-start-3-minutes) · [Tested hardware](#-tested-hardware) · [What you can ask](#-what-you-can-ask) · [Local models](#-run-it-100-locally) · [Safety](#-safety-built-in-not-bolted-on) · [Configuration](#%EF%B8%8F-configuration) · [Troubleshooting](#-troubleshooting)
 
 </div>
 
@@ -43,6 +48,16 @@ No web page with a captcha. No vendor app. No CLI manuals. **You ask, your assis
 | 🏠 **Several ONTs** | Home, office, parents' house: one server, one config, pick by name. |
 | 🐢 **Gentle on the hardware** | ONTs have tiny memory. Sessions are paced and short, so the box stays healthy. |
 
+## 📟 Tested hardware
+
+| Make | Model | Type | Firmware | Result |
+|---|---|---|---|---|
+| **Digisol** | **DG-GR6011** | EPON ONT (Realtek SDK) | V1.0.00-240813 | ✅ Tested on real hardware: SSH login, CLI discovery, `show` commands, Claude and local Qwen3.8 27B |
+
+**Should also work:** other ONTs whose SSH command line answers `?` with a command list, which is common on Realtek-based GPON/EPON ONTs. The server learns each box's commands itself, so nothing is model-specific.
+
+**Got another make or model working?** Open an issue with the make, model, firmware and the output of `ont-mcp --check`. It takes 2 minutes and gets your box into this table. ❤️
+
 ## 🚀 Quick start (3 minutes)
 
 ### 1 · Turn on SSH on your ONT
@@ -65,29 +80,29 @@ Pick **one**:
 <summary><b>🍎 macOS: Keychain (recommended)</b></summary>
 
 ```bash
-security add-generic-password -s digisol-ont -a admin -w
+security add-generic-password -s ont-mcp -a admin -w
 ```
-It asks for the password and stores it encrypted. Then use `"ONT_KEYCHAIN": "digisol-ont"` below.
+It asks for the password and stores it encrypted. Then use `"ONT_KEYCHAIN": "ont-mcp"` below.
 </details>
 
 <details>
 <summary><b>🐧 Linux: Secret Service (GNOME Keyring / KWallet)</b></summary>
 
 ```bash
-secret-tool store --label="Digisol ONT" service digisol-ont user admin
+secret-tool store --label="ONT MCP" service ont-mcp user admin
 ```
-Then use `"ONT_KEYCHAIN": "digisol-ont"` below.
+Then use `"ONT_KEYCHAIN": "ont-mcp"` below.
 </details>
 
 <details>
 <summary><b>📄 Any OS: a password file</b></summary>
 
 ```bash
-mkdir -p ~/.config/digisol-mcp
-printf '%s' 'YOUR-ONT-PASSWORD' > ~/.config/digisol-mcp/ont.password
-chmod 600 ~/.config/digisol-mcp/ont.password
+mkdir -p ~/.config/ont-mcp
+printf '%s' 'YOUR-ONT-PASSWORD' > ~/.config/ont-mcp/ont.password
+chmod 600 ~/.config/ont-mcp/ont.password
 ```
-Then use `"ONT_PASSWORD_FILE": "~/.config/digisol-mcp/ont.password"` below.
+Then use `"ONT_PASSWORD_FILE": "~/.config/ont-mcp/ont.password"` below.
 </details>
 
 ### 3 · Add it to your AI app
@@ -102,12 +117,12 @@ Settings → Developer → Edit Config, then add:
 ```json
 {
   "mcpServers": {
-    "digisol": {
+    "ont": {
       "command": "uvx",
-      "args": ["--from", "git+https://github.com/Santhosh17/digisol-mcp", "digisol-mcp"],
+      "args": ["--from", "git+https://github.com/Santhosh17/ont-mcp", "ont-mcp"],
       "env": {
         "ONT_HOST": "192.168.1.1",
-        "ONT_KEYCHAIN": "digisol-ont"
+        "ONT_KEYCHAIN": "ont-mcp"
       }
     }
   }
@@ -120,9 +135,9 @@ Restart Claude Desktop.
 <summary><b>Claude Code</b></summary>
 
 ```bash
-claude mcp add digisol --scope user \
-  -e ONT_HOST=192.168.1.1 -e ONT_KEYCHAIN=digisol-ont \
-  -- uvx --from git+https://github.com/Santhosh17/digisol-mcp digisol-mcp
+claude mcp add ont --scope user \
+  -e ONT_HOST=192.168.1.1 -e ONT_KEYCHAIN=ont-mcp \
+  -- uvx --from git+https://github.com/Santhosh17/ont-mcp ont-mcp
 ```
 </details>
 
@@ -138,10 +153,10 @@ Same JSON as Claude Desktop, under `"mcpServers"`.
 ```json
 {
   "servers": {
-    "digisol": {
+    "ont": {
       "command": "uvx",
-      "args": ["--from", "git+https://github.com/Santhosh17/digisol-mcp", "digisol-mcp"],
-      "env": { "ONT_HOST": "192.168.1.1", "ONT_KEYCHAIN": "digisol-ont" }
+      "args": ["--from", "git+https://github.com/Santhosh17/ont-mcp", "ont-mcp"],
+      "env": { "ONT_HOST": "192.168.1.1", "ONT_KEYCHAIN": "ont-mcp" }
     }
   }
 }
@@ -156,10 +171,10 @@ Program → Install → Edit mcp.json:
 ```json
 {
   "mcpServers": {
-    "digisol": {
+    "ont": {
       "command": "python3",
-      "args": ["/full/path/to/digisol-mcp/digisol_mcp.py"],
-      "env": { "ONT_HOST": "192.168.1.1", "ONT_KEYCHAIN": "digisol-ont" }
+      "args": ["/full/path/to/ont-mcp/ont_mcp.py"],
+      "env": { "ONT_HOST": "192.168.1.1", "ONT_KEYCHAIN": "ont-mcp" }
     }
   }
 }
@@ -171,16 +186,16 @@ Desktop apps often don't see `uvx` on their PATH, so this uses a clone and `pyth
 <summary><b>No uv? Use plain Python</b></summary>
 
 ```bash
-git clone https://github.com/Santhosh17/digisol-mcp
+git clone https://github.com/Santhosh17/ont-mcp
 ```
-Then use `"command": "python3"` and `"args": ["/full/path/to/digisol-mcp/digisol_mcp.py"]`.
+Then use `"command": "python3"` and `"args": ["/full/path/to/ont-mcp/ont_mcp.py"]`.
 (On Windows: `"command": "python"`.)
 </details>
 
 ### ✅ Check it
 
 ```bash
-ONT_HOST=192.168.1.1 ONT_KEYCHAIN=digisol-ont uvx --from git+https://github.com/Santhosh17/digisol-mcp digisol-mcp --check
+ONT_HOST=192.168.1.1 ONT_KEYCHAIN=ont-mcp uvx --from git+https://github.com/Santhosh17/ont-mcp ont-mcp --check
 ```
 
 ```text
@@ -249,20 +264,20 @@ Put these in the `env` block of your AI app's config:
 | `ONT_KEYCHAIN` | | Keychain (macOS) / Secret Service (Linux) entry name |
 | `ONT_PASSWORD_FILE` | | Path to a file holding only the password |
 | `ONT_PASSWORD` | | The password itself (easiest, least safe) |
-| `ONT_LABEL` | `Digisol ONT` | Friendly name shown in approval dialogs |
+| `ONT_LABEL` | `Fibre ONT` | Friendly name shown in approval dialogs |
 | `ONT_READ_ONLY` | off | `1` turns off all changes |
 | `ONT_PROMPT` | `> or #` | Regex for the CLI prompt, only if yours is unusual |
 
 ### Several ONTs: a JSON file
 
-Copy [`ont.example.json`](ont.example.json) to `~/.config/digisol-mcp/ont.json` (found automatically) or anywhere you like and point `ONT_CONFIG` at it:
+Copy [`ont.example.json`](ont.example.json) to `~/.config/ont-mcp/ont.json` (found automatically) or anywhere you like and point `ONT_CONFIG` at it:
 
 ```json
 {
   "default": "home",
   "devices": {
-    "home":   { "host": "192.168.1.1",  "keychain": "digisol-home", "label": "Home ONT" },
-    "office": { "host": "192.168.10.1", "password_file": "~/.config/digisol-mcp/office.password",
+    "home":   { "host": "192.168.1.1",  "keychain": "ont-home", "label": "Home ONT" },
+    "office": { "host": "192.168.10.1", "password_file": "~/.config/ont-mcp/office.password",
                 "read_only": true }
   }
 }
@@ -280,16 +295,6 @@ The tools then take a `device` argument: *"check the office ONT"*.
 | `ont_help` | asks the CLI what exists under a path (`config wan ?`) | never |
 | `ont_run` | any change: `config …`, save, reboot, … | **always** |
 
-## 📟 Compatibility
-
-| ONT | Firmware | Status |
-|---|---|---|
-| Digisol **DG-GR6011** (EPON) | V1.0.00-240813 | ✅ Tested on real hardware |
-| Other Digisol GPON/EPON ONTs with an SSH CLI | | 🟡 Should work, since the server learns the CLI. [Tell us!](CONTRIBUTING.md) |
-| Other Realtek-based ONTs with the same CLI | | 🟡 Probably works. Please report. |
-
-**Got a different model working?** Open an issue with the model name and the output of `--check`. It takes 2 minutes and helps everyone. ❤️
-
 ## 🩺 Troubleshooting
 
 | You see | Fix |
@@ -300,10 +305,10 @@ The tools then take a `device` argument: *"check the office ONT"*.
 | `no matching host key type` when testing by hand | `ssh -o HostKeyAlgorithms=+ssh-rsa -o PubkeyAcceptedAlgorithms=+ssh-rsa admin@192.168.1.1`. The server already does this. |
 | `the ONT's SSH key changed` | Expected after a factory reset or firmware update: `ssh-keygen -R 192.168.1.1` |
 | `no approval dialog could be shown` | Linux: install `zenity` or `kdialog`. Headless machines can only read, by design. |
-| `no ONT configured` | Set `ONT_HOST` in your AI app's `env` block, or create `~/.config/digisol-mcp/ont.json`. |
+| `no ONT configured` | Set `ONT_HOST` in your AI app's `env` block, or create `~/.config/ont-mcp/ont.json`. |
 | The first answer takes ~10 s | Normal: on first use it learns your ONT's commands, and sessions are paced to protect the box. |
 
-Still stuck? Run `digisol-mcp --check` and paste the output into an issue.
+Still stuck? Run `ont-mcp --check` and paste the output into an issue.
 
 ## ❓ FAQ
 
@@ -332,9 +337,9 @@ Only if your ONT's CLI exposes them. Many firmwares show them only in the web pa
 </details>
 
 <details>
-<summary><b>Is this made by Digisol?</b></summary>
+<summary><b>Is this made by Digisol or another ONT maker?</b></summary>
 
-No. It's an independent open-source project, not affiliated with or endorsed by Digisol. "Digisol" is a trademark of its owner.
+No. It's an independent open-source project, not affiliated with or endorsed by any ONT manufacturer. Digisol and other product names are trademarks of their owners, used here only to say which hardware has been tested.
 </details>
 
 ## 🤝 Contributing

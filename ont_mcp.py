@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""digisol-mcp: let AI assistants read, and safely configure, Digisol fibre ONTs over SSH.
+"""ont-mcp: let AI assistants read, and safely configure, fibre ONTs over SSH (tested on Digisol).
 
 One file, Python standard library only. Speaks MCP (JSON-RPC 2.0, newline-delimited) over stdio.
 
@@ -8,16 +8,16 @@ How it works
     command, reads up to the next prompt, and closes. Sessions are paced (MIN_GAP seconds apart)
     because ONTs have very little memory.
   * Nothing about your ONT is hardcoded. The server learns its commands by asking the CLI itself
-    ("?" and "show ?"), so different Digisol models and firmware versions work unchanged.
+    ("?" and "show ?"), so different ONT models and firmware versions work unchanged.
   * Reads ("show ...", help with "?") run freely. Every other command is a change: it runs only
     after a person types a confirmation word into a desktop dialog. The AI cannot answer it.
 
 Configuration (your ONT details never live in this repo): see README.md.
-  ONT_CONFIG=/path/to/ont.json  or  ~/.config/digisol-mcp/ont.json  or  ONT_HOST=... env vars.
+  ONT_CONFIG=/path/to/ont.json  or  ~/.config/ont-mcp/ont.json  or  ONT_HOST=... env vars.
 
 Usage
-  digisol-mcp            run the MCP server (your AI client starts this for you)
-  digisol-mcp --check    test your configuration and log in to every ONT once
+  ont-mcp            run the MCP server (your AI client starts this for you)
+  ont-mcp --check    test your configuration and log in to every ONT once
 """
 
 import json
@@ -32,7 +32,7 @@ import tempfile
 import threading
 import time
 
-NAME = "digisol-mcp"
+NAME = "ont-mcp"
 VERSION = "1.0.0"
 PROTOCOL = "2025-06-18"
 
@@ -41,7 +41,7 @@ LOGIN_TIMEOUT = 30      # seconds to reach the first prompt
 CMD_TIMEOUT = 20        # seconds to wait for the prompt after a command
 CONSENT_TIMEOUT = 120   # seconds the approval dialog stays open
 
-DEFAULT_CONFIG = os.path.join(os.path.expanduser("~"), ".config", "digisol-mcp", "ont.json")
+DEFAULT_CONFIG = os.path.join(os.path.expanduser("~"), ".config", "ont-mcp", "ont.json")
 DEFAULT_PROMPT = r"(?:^|\n)[\w.@()\-]{0,32}[>#] ?\Z"   # a short last line ending in > or #
 FIELDS = {"host", "port", "user", "label", "password", "password_file", "keychain", "read_only", "prompt"}
 
@@ -101,7 +101,7 @@ def make_device(dev_id, raw):
     if not host:
         raise OntError("device %r needs a host (the ONT's IP address)" % dev_id)
     d = {"id": dev_id, "host": host, "port": int(raw.get("port") or 22),
-         "user": str(raw.get("user") or "admin"), "label": str(raw.get("label") or "Digisol ONT"),
+         "user": str(raw.get("user") or "admin"), "label": str(raw.get("label") or "Fibre ONT"),
          "read_only": raw.get("read_only") is True, "prompt": re.compile(raw.get("prompt") or DEFAULT_PROMPT)}
     for k in ("password", "password_file", "keychain"):
         if raw.get(k):
@@ -186,7 +186,7 @@ def askpass_program():
     """A tiny wrapper so ssh can ask *this* file for the password (SSH_ASKPASS takes no arguments)."""
     global _askpass
     if _askpass is None:
-        folder = tempfile.mkdtemp(prefix="digisol-mcp-")   # private: mode 700
+        folder = tempfile.mkdtemp(prefix="ont-mcp-")   # private: mode 700
         me = os.path.abspath(__file__)
         if os.name == "nt":
             path, body = os.path.join(folder, "askpass.cmd"), '@"%s" "%s" %%*\r\n' % (sys.executable, me)
@@ -249,8 +249,8 @@ def run_on_ont(command, d):
         if wait > 0:
             time.sleep(wait)
         env = dict(os.environ, SSH_ASKPASS=askpass_program(), SSH_ASKPASS_REQUIRE="force",
-                   DISPLAY=os.environ.get("DISPLAY", ":0"), DIGISOL_MCP_ASKPASS="1",
-                   DIGISOL_MCP_SECRET=get_password(d))
+                   DISPLAY=os.environ.get("DISPLAY", ":0"), ONT_MCP_ASKPASS="1",
+                   ONT_MCP_SECRET=get_password(d))
         cmd = ["ssh", "-T", "-p", str(d["port"]),
                "-o", "StrictHostKeyChecking=accept-new", "-o", "ConnectTimeout=15",
                "-o", "NumberOfPasswordPrompts=1",
@@ -430,7 +430,7 @@ def tools():
     multi = " Several ONTs are configured: pick one with 'device'." if len(DEVICES) > 1 else ""
     return [
         {"name": "ont_show", "fn": lambda a: execute("show " + str(a.get("item", "")).strip(), device_id=a.get("device")),
-         "description": "Read status or settings from the Digisol fibre ONT with 'show <item>'. Read-only, "
+         "description": "Read status or settings from the fibre ONT with 'show <item>'. Read-only, "
                         "safe. Common items: status (uptime, firmware, WAN), wan, interface, lan, dhcp, arp, route, "
                         "remoteaccess, portforward, tr069. Call ont_help with path 'show' to list every item "
                         "this ONT offers." + multi,
@@ -521,8 +521,8 @@ def check():
 
 def main(argv=None):
     global DEVICES, DEFAULT_ID, CONFIG_ERROR
-    if os.environ.get("DIGISOL_MCP_ASKPASS") == "1":   # ssh is asking us for the password
-        sys.stdout.write(os.environ.get("DIGISOL_MCP_SECRET", ""))
+    if os.environ.get("ONT_MCP_ASKPASS") == "1":   # ssh is asking us for the password
+        sys.stdout.write(os.environ.get("ONT_MCP_SECRET", ""))
         return 0
     argv = sys.argv[1:] if argv is None else argv
     if argv[:1] in (["--version"], ["-V"]):

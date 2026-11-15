@@ -3,9 +3,9 @@ requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "digisol-mcp"
+name = "ont-mcp"
 version = "1.0.0"
-description = "Talk to your Digisol fibre ONT in plain English. An MCP server for Claude, Cursor and VS Code: zero dependencies, human-approved changes."
+description = "Talk to your fibre ONT in plain English. An MCP server for Claude, Cursor, VS Code and local models: zero dependencies, human-approved changes. Tested on Digisol."
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
@@ -19,7 +19,7 @@ classifiers = [
 dependencies = []
 
 [project.scripts]
-digisol-mcp = "digisol_mcp:main"
+ont-mcp = "ont_mcp:main"
 
 [tool.setuptools]
-py-modules = ["digisol_mcp"]
+py-modules = ["ont_mcp"]

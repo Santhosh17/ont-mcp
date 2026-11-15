@@ -4,13 +4,13 @@
     "home": {
       "host": "192.168.1.1",
       "user": "admin",
-      "password_file": "~/.config/digisol-mcp/home.password",
+      "password_file": "~/.config/ont-mcp/home.password",
       "label": "Home fibre ONT"
     },
     "office": {
       "host": "192.168.10.1",
       "user": "admin",
-      "keychain": "digisol-office",
+      "keychain": "ont-office",
       "label": "Office ONT",
       "read_only": true
     }

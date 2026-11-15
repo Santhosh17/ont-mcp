@@ -8,7 +8,7 @@ Open an issue titled `Works: <model>` (or `Broken: <model>`) with:
 
 1. The ONT model (on the sticker), e.g. `DG-GR6011`
 2. Firmware version (from `show status`)
-3. The output of `digisol-mcp --check`. **Remove your IP and serials if you like.**
+3. The output of `ont-mcp --check`. **Remove your IP and serials if you like.**
 4. If something failed: what you asked, and the error
 
 If your ONT's prompt isn't `>` or `#`, tell us what it looks like. You can already work around it with `ONT_PROMPT`.
