@@ -7,3 +7,8 @@ __pycache__/
 build/
 dist/
 .venv/
+
+# Local-only captures and tooling output (contain MACs, serials, IPs)
+local-private/
+.playwright-cli/
+.DS_Store

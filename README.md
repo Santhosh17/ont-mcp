@@ -62,11 +62,13 @@ No web page with a captcha. No vendor app. No CLI manuals. **You ask, your assis
 
 ### 1 · Turn on SSH on your ONT
 
-Open your ONT's web page (the address is on the sticker under the box, often `192.168.1.1`), find **Remote Access** (sometimes **Service Control**) and allow **SSH on the LAN side**. Then check it works from a terminal:
+Open your ONT's web page (the address is on the sticker under the box, or it is your router's gateway address; it varies by ISP, e.g. `192.168.1.1`, `192.168.0.1` or `192.168.100.1`), find **Remote Access** (sometimes **Service Control**) and allow **SSH on the LAN side**. Then check it works from a terminal:
 
 ```bash
-ssh admin@192.168.1.1
+ssh admin@YOUR-ONT-IP
 ```
+
+Replace `YOUR-ONT-IP` here and in every config below with your ONT's real address. Not sure what it is? Run `netstat -rn | grep default` (macOS/Linux) or `ipconfig` (Windows) and look for the default gateway, or check the sticker on the box.
 
 If you get a `>` prompt, you're good. Type `exit`.
 
@@ -121,7 +123,7 @@ Settings → Developer → Edit Config, then add:
       "command": "uvx",
       "args": ["--from", "git+https://github.com/Santhosh17/ont-mcp", "ont-mcp"],
       "env": {
-        "ONT_HOST": "192.168.1.1",
+        "ONT_HOST": "YOUR-ONT-IP",
         "ONT_KEYCHAIN": "ont-mcp"
       }
     }
@@ -136,7 +138,7 @@ Restart Claude Desktop.
 
 ```bash
 claude mcp add ont --scope user \
-  -e ONT_HOST=192.168.1.1 -e ONT_KEYCHAIN=ont-mcp \
+  -e ONT_HOST=YOUR-ONT-IP -e ONT_KEYCHAIN=ont-mcp \
   -- uvx --from git+https://github.com/Santhosh17/ont-mcp ont-mcp
 ```
 </details>
@@ -156,7 +158,7 @@ Same JSON as Claude Desktop, under `"mcpServers"`.
     "ont": {
       "command": "uvx",
       "args": ["--from", "git+https://github.com/Santhosh17/ont-mcp", "ont-mcp"],
-      "env": { "ONT_HOST": "192.168.1.1", "ONT_KEYCHAIN": "ont-mcp" }
+      "env": { "ONT_HOST": "YOUR-ONT-IP", "ONT_KEYCHAIN": "ont-mcp" }
     }
   }
 }
@@ -174,7 +176,7 @@ Program → Install → Edit mcp.json:
     "ont": {
       "command": "python3",
       "args": ["/full/path/to/ont-mcp/ont_mcp.py"],
-      "env": { "ONT_HOST": "192.168.1.1", "ONT_KEYCHAIN": "ont-mcp" }
+      "env": { "ONT_HOST": "YOUR-ONT-IP", "ONT_KEYCHAIN": "ont-mcp" }
     }
   }
 }
@@ -195,11 +197,11 @@ Then use `"command": "python3"` and `"args": ["/full/path/to/ont-mcp/ont_mcp.py"
 ### ✅ Check it
 
 ```bash
-ONT_HOST=192.168.1.1 ONT_KEYCHAIN=ont-mcp uvx --from git+https://github.com/Santhosh17/ont-mcp ont-mcp --check
+ONT_HOST=YOUR-ONT-IP ONT_KEYCHAIN=ont-mcp uvx --from git+https://github.com/Santhosh17/ont-mcp ont-mcp --check
 ```
 
 ```text
-• ont  admin@192.168.1.1:22
+• ont  admin@YOUR-ONT-IP:22
   ✓ logged in. CLI commands: backup, config, debug, exit, help, reboot, restore, show
 ```
 
@@ -258,7 +260,7 @@ Put these in the `env` block of your AI app's config:
 
 | Variable | Default | What it is |
 |---|---|---|
-| `ONT_HOST` | **required** | ONT IP address, e.g. `192.168.1.1` |
+| `ONT_HOST` | **required** | ONT IP address, the address of your ONT on your LAN, see [step 1](#1--turn-on-ssh-on-your-ont) |
 | `ONT_USER` | `admin` | SSH username |
 | `ONT_PORT` | `22` | SSH port |
 | `ONT_KEYCHAIN` | | Keychain (macOS) / Secret Service (Linux) entry name |
@@ -302,8 +304,8 @@ The tools then take a `device` argument: *"check the office ONT"*.
 | `wrong username or password` | Check the password in your keychain/file. The SSH login is usually the same as the web login. |
 | `SSH is off on the ONT` | Enable SSH under Remote Access in the ONT web page. |
 | `the ONT did not answer` | Wrong IP, or this computer isn't on the ONT's network (for example, it's behind another router). |
-| `no matching host key type` when testing by hand | `ssh -o HostKeyAlgorithms=+ssh-rsa -o PubkeyAcceptedAlgorithms=+ssh-rsa admin@192.168.1.1`. The server already does this. |
-| `the ONT's SSH key changed` | Expected after a factory reset or firmware update: `ssh-keygen -R 192.168.1.1` |
+| `no matching host key type` when testing by hand | `ssh -o HostKeyAlgorithms=+ssh-rsa -o PubkeyAcceptedAlgorithms=+ssh-rsa admin@YOUR-ONT-IP`. The server already does this. |
+| `the ONT's SSH key changed` | Expected after a factory reset or firmware update: `ssh-keygen -R YOUR-ONT-IP` |
 | `no approval dialog could be shown` | Linux: install `zenity` or `kdialog`. Headless machines can only read, by design. |
 | `no ONT configured` | Set `ONT_HOST` in your AI app's `env` block, or create `~/.config/ont-mcp/ont.json`. |
 | The first answer takes ~10 s | Normal: on first use it learns your ONT's commands, and sessions are paced to protect the box. |
