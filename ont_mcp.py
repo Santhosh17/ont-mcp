@@ -7,6 +7,8 @@ How it works
   * Every tool call opens one SSH session to the ONT, waits for the CLI prompt, types one
     command, reads up to the next prompt, and closes. Sessions are paced (MIN_GAP seconds apart)
     because ONTs have very little memory.
+  * If the ONT's SSH port refuses the connection, it falls back to Telnet (unencrypted), but only
+    to private addresses. Set "protocol": "ssh" to forbid that, or "telnet" to force it.
   * Nothing about your ONT is hardcoded. The server learns its commands by asking the CLI itself
     ("?" and "show ?"), so different ONT models and firmware versions work unchanged.
   * Reads ("show ...", help with "?") run freely. Every other command is a change: it runs only
@@ -20,12 +22,14 @@ Usage
   ont-mcp --check    test your configuration and log in to every ONT once
 """
 
+import ipaddress
 import json
 import os
 import queue
 import re
 import shlex
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -43,7 +47,8 @@ CONSENT_TIMEOUT = 120   # seconds the approval dialog stays open
 
 DEFAULT_CONFIG = os.path.join(os.path.expanduser("~"), ".config", "ont-mcp", "ont.json")
 DEFAULT_PROMPT = r"(?:^|\n)[\w.@()\-]{0,32}[>#] ?\Z"   # a short last line ending in > or #
-FIELDS = {"host", "port", "user", "label", "password", "password_file", "keychain", "read_only", "prompt"}
+FIELDS = {"host", "port", "user", "label", "password", "password_file", "keychain", "read_only", "prompt",
+          "protocol", "telnet_port", "allow_public_telnet"}
 
 # Words that make a change high-impact: the person must type the word itself, not just YES.
 CRITICAL = {
@@ -85,6 +90,10 @@ class OntError(Exception):
     pass
 
 
+class SshRefused(OntError):
+    """The ONT's SSH port refused the connection: the only reason to try Telnet."""
+
+
 # ---------------------------------------------------------------- configuration
 
 DEVICES, DEFAULT_ID, CONFIG_ERROR = {}, None, None
@@ -100,9 +109,14 @@ def make_device(dev_id, raw):
     host = str(raw.get("host", "")).strip()
     if not host:
         raise OntError("device %r needs a host (the ONT's IP address)" % dev_id)
+    protocol = str(raw.get("protocol") or "auto").lower()
+    if protocol not in ("auto", "ssh", "telnet"):
+        raise OntError("device %r: protocol must be auto, ssh or telnet" % dev_id)
     d = {"id": dev_id, "host": host, "port": int(raw.get("port") or 22),
          "user": str(raw.get("user") or "admin"), "label": str(raw.get("label") or "Fibre ONT"),
-         "read_only": raw.get("read_only") is True, "prompt": re.compile(raw.get("prompt") or DEFAULT_PROMPT)}
+         "read_only": raw.get("read_only") is True, "prompt": re.compile(raw.get("prompt") or DEFAULT_PROMPT),
+         "protocol": protocol, "telnet_port": int(raw.get("telnet_port") or 23),
+         "allow_public_telnet": raw.get("allow_public_telnet") is True}
     for k in ("password", "password_file", "keychain"):
         if raw.get(k):
             d[k] = str(raw[k])
@@ -130,10 +144,13 @@ def load_config(environ=os.environ):
     if environ.get("ONT_HOST"):
         env_map = {"host": "ONT_HOST", "port": "ONT_PORT", "user": "ONT_USER", "label": "ONT_LABEL",
                    "password": "ONT_PASSWORD", "password_file": "ONT_PASSWORD_FILE",
-                   "keychain": "ONT_KEYCHAIN", "prompt": "ONT_PROMPT"}
+                   "keychain": "ONT_KEYCHAIN", "prompt": "ONT_PROMPT",
+                   "protocol": "ONT_PROTOCOL", "telnet_port": "ONT_TELNET_PORT"}
         raw = {k: environ[v] for k, v in env_map.items() if environ.get(v)}
         if environ.get("ONT_READ_ONLY", "").lower() in ("1", "true", "yes"):
             raw["read_only"] = True
+        if environ.get("ONT_ALLOW_PUBLIC_TELNET", "").lower() in ("1", "true", "yes"):
+            raw["allow_public_telnet"] = True
         return {"ont": make_device("ont", raw)}, "ont"
     raise OntError("no ONT configured: set ONT_HOST (plus a password) in your MCP client config, "
                    "or create %s. See the README." % DEFAULT_CONFIG)
@@ -177,9 +194,11 @@ def get_password(d):
 
 # ---------------------------------------------------------------- SSH session
 
-_lock = threading.Lock()
+_lock = threading.RLock()   # re-entrant: run_on_ont holds it while the SSH and Telnet paths take it too
 _last = {}
 _askpass = None
+_via = {}                   # device id -> "telnet" once a session had to use Telnet
+_telnet_only = set()        # devices whose SSH port refused us: skip SSH from then on
 
 
 def askpass_program():
@@ -243,11 +262,23 @@ def clean(output, command, prompt):
     return "\n".join(lines).strip("\n")
 
 
-def run_on_ont(command, d):
+def wait_turn(d):
+    wait = _last.get(d["host"], 0.0) + MIN_GAP - time.monotonic()
+    if wait > 0:
+        time.sleep(wait)
+
+
+def finish(out, ok, command, d):
+    result = clean(out, command, d["prompt"])
+    if not ok:
+        result += ("\n[no prompt within %ds: the command may still be running, or the ONT asked a "
+                   "question; the session was closed without answering]" % CMD_TIMEOUT)
+    return result
+
+
+def run_ssh(command, d):
     with _lock:
-        wait = _last.get(d["host"], 0.0) + MIN_GAP - time.monotonic()
-        if wait > 0:
-            time.sleep(wait)
+        wait_turn(d)
         env = dict(os.environ, SSH_ASKPASS=askpass_program(), SSH_ASKPASS_REQUIRE="force",
                    DISPLAY=os.environ.get("DISPLAY", ":0"), ONT_MCP_ASKPASS="1",
                    ONT_MCP_SECRET=get_password(d))
@@ -268,15 +299,11 @@ def run_on_ont(command, d):
         try:
             banner, ok = read_until_prompt(q, LOGIN_TIMEOUT, d["prompt"])
             if not ok:
-                raise OntError(login_error(d, banner))
+                raise (SshRefused if "Connection refused" in banner else OntError)(login_error(d, banner))
             proc.stdin.write((command + "\n").encode())
             proc.stdin.flush()
             out, ok = read_until_prompt(q, CMD_TIMEOUT, d["prompt"])
-            result = clean(out, command, d["prompt"])
-            if not ok:
-                result += ("\n[no prompt within %ds: the command may still be running, or the ONT asked a "
-                           "question; the session was closed without answering]" % CMD_TIMEOUT)
-            return result
+            return finish(out, ok, command, d)
         finally:
             for step in (proc.stdin.close, proc.terminate):
                 try:
@@ -289,6 +316,128 @@ def run_on_ont(command, d):
                 proc.kill()
             proc.stdout.close()
             _last[d["host"]] = time.monotonic()
+
+
+# ---------------------------------------------------------------- Telnet (fallback; NOT encrypted)
+
+IAC, DONT, DO, WONT, WILL, SB, SE = 255, 254, 253, 252, 251, 250, 240
+USER_PROMPT = r"(?i:login|user ?name)\s*:\s*\Z"
+PASS_PROMPT = r"(?i:password)\s*:\s*\Z"
+
+
+def telnet_target(d):
+    """The address to dial. Telnet sends the password in clear text, so only private addresses are allowed."""
+    try:
+        infos = socket.getaddrinfo(d["host"], d["telnet_port"], type=socket.SOCK_STREAM)
+    except OSError as e:
+        raise OntError("cannot resolve %s: %s" % (d["host"], e))
+    for info in infos:   # check every answer, and dial the one we checked (no DNS switch in between)
+        ip = ipaddress.ip_address(info[4][0].split("%")[0])
+        if not (ip.is_private or ip.is_loopback or ip.is_link_local) and not d["allow_public_telnet"]:
+            raise OntError("Telnet to %s is refused: it is not a private address and Telnet sends the password "
+                           "unencrypted (set allow_public_telnet to override)" % d["host"])
+    return infos[0][4][0]
+
+
+def telnet_pump(sock, q):
+    """Read the socket, refuse every Telnet option the ONT offers, and queue the plain text."""
+    state = cmd = 0   # 0 text, 1 after IAC, 2 option byte, 3 inside SB..., 4 IAC inside SB
+    try:
+        for data in iter(lambda: sock.recv(4096), b""):
+            out = bytearray()
+            for b in data:
+                if state == 0:
+                    if b == IAC:
+                        state = 1
+                    elif b != 0:
+                        out.append(b)
+                elif state == 1:
+                    if b in (DO, DONT, WILL, WONT):
+                        cmd, state = b, 2
+                    elif b == SB:
+                        state = 3
+                    else:
+                        if b == IAC:
+                            out.append(IAC)
+                        state = 0
+                elif state == 2:
+                    if cmd in (DO, WILL):
+                        sock.sendall(bytes([IAC, WONT if cmd == DO else DONT, b]))
+                    state = 0
+                elif state == 3:
+                    state = 4 if b == IAC else 3
+                else:
+                    state = 0 if b == SE else 3
+            if out:
+                q.put(bytes(out))
+    except (OSError, ValueError):
+        pass
+    q.put(None)
+
+
+def telnet_kind(text):
+    if re.search(USER_PROMPT, text):
+        return "user"
+    return "password" if re.search(PASS_PROMPT, text) else "cli"
+
+
+def run_telnet(command, d):
+    with _lock:
+        host = telnet_target(d)
+        wait_turn(d)
+        try:
+            sock = socket.create_connection((host, d["telnet_port"]), timeout=15)
+        except OSError as e:
+            raise OntError("could not connect to %s over Telnet: %s" % (d["host"], e))
+        q = queue.Queue()
+        threading.Thread(target=telnet_pump, args=(sock, q), daemon=True).start()
+        send = lambda s: sock.sendall(s.encode() + b"\r\n")
+        anything = re.compile("(?:%s)|(?:%s)|(?:%s)" % (USER_PROMPT, PASS_PROMPT, d["prompt"].pattern))
+        fail = "could not log in to %s@%s over Telnet: " % (d["user"], d["host"])
+        try:
+            # Send a secret only in answer to its prompt, and try the password once (no lockouts).
+            text, ok = read_until_prompt(q, LOGIN_TIMEOUT, anything)
+            kind = telnet_kind(text) if ok else "none"
+            if kind == "user":
+                send(d["user"])
+                text, ok = read_until_prompt(q, LOGIN_TIMEOUT, anything)
+                kind = telnet_kind(text) if ok else "none"
+            if kind == "password":
+                send(get_password(d))
+                text, ok = read_until_prompt(q, LOGIN_TIMEOUT, anything)
+                if not ok or telnet_kind(text) != "cli":
+                    raise OntError(fail + "wrong username or password")
+            elif kind != "cli":
+                raise OntError(fail + "no login prompt I recognise (is Telnet enabled, and is this the right port?)")
+            send(command)
+            out, ok = read_until_prompt(q, CMD_TIMEOUT, d["prompt"])
+            return finish(out, ok, command, d)
+        finally:
+            try:
+                sock.close()
+            except OSError:
+                pass
+            _last[d["host"]] = time.monotonic()
+
+
+def run_on_ont(command, d):
+    """SSH first. Telnet only if the ONT's SSH port refuses us (protocol auto) or the device says protocol telnet."""
+    with _lock:
+        if d["protocol"] == "telnet" or d["id"] in _telnet_only:
+            _via[d["id"]] = "telnet"
+            return run_telnet(command, d)
+        try:
+            return run_ssh(command, d)
+        except SshRefused as e:
+            if d["protocol"] != "auto":
+                raise
+            try:
+                telnet_target(d)
+            except OntError as why:
+                raise OntError("%s. Telnet fallback is blocked: %s" % (e, why))
+            _telnet_only.add(d["id"])
+            _via[d["id"]] = "telnet"
+            return run_telnet(command, d)
 
 
 # ---------------------------------------------------------------- learning the CLI
@@ -385,9 +534,10 @@ def _dialog_linux(title, body):
 def ask_consent(cmd, level, warning, word, d, reason=""):
     """Desktop dialog. True only if a person typed the confirmation word and confirmed."""
     title = "ONT %s: approval needed" % ("DANGER" if level == "critical" else "change")
-    body = ("Your AI assistant wants to run this on %s (%s@%s):\n\n    %s\n\n%s.%s\n\n"
+    tel = "  [Telnet: unencrypted]" if d["protocol"] == "telnet" or _via.get(d["id"]) else ""
+    body = ("Your AI assistant wants to run this on %s (%s@%s)%s:\n\n    %s\n\n%s.%s\n\n"
             "Type %s and confirm to allow it. Anything else cancels."
-            % (d["label"], d["user"], d["host"], cmd, warning.capitalize(),
+            % (d["label"], d["user"], d["host"], tel, cmd, warning.capitalize(),
                ("\nReason given: " + reason) if reason else "", word))
     try:
         if sys.platform == "darwin":
@@ -413,7 +563,9 @@ def execute(command, reason="", device_id=None):
         if not ok:
             raise OntError("not run: " + why)
         note = "\n\n[%s]" % why
-    return "[%s · %s] %s\n\n%s%s" % (d["id"], d["host"], cmd, run_on_ont(cmd, d) or "(no output)", note)
+    out = run_on_ont(cmd, d) or "(no output)"
+    via = " · Telnet, unencrypted" if _via.get(d["id"]) else ""
+    return "[%s · %s%s] %s\n\n%s%s" % (d["id"], d["host"], via, cmd, out, note)
 
 
 # ---------------------------------------------------------------- MCP tools
@@ -512,7 +664,8 @@ def check():
         print("• %s  %s@%s:%d%s" % (d["id"], d["user"], d["host"], d["port"], "  (read-only)" if d["read_only"] else ""))
         try:
             words = parse_help(run_on_ont("?", d))
-            print("  ✓ logged in. CLI commands: %s" % (", ".join(words) or "(help not recognised; reads still work)"))
+            print("  ✓ logged in%s. CLI commands: %s" % (" over Telnet (unencrypted)" if _via.get(d["id"]) else "",
+                                                       ", ".join(words) or "(help not recognised; reads still work)"))
         except OntError as e:
             print("  ✗ %s" % e)
             failed = True
