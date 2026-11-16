@@ -269,6 +269,9 @@ Put these in the `env` block of your AI app's config:
 | `ONT_LABEL` | `Fibre ONT` | Friendly name shown in approval dialogs |
 | `ONT_READ_ONLY` | off | `1` turns off all changes |
 | `ONT_PROMPT` | `> or #` | Regex for the CLI prompt, only if yours is unusual |
+| `ONT_PROTOCOL` | `auto` | `auto`: SSH, with [Telnet fallback](#-telnet-fallback-for-ssh-less-onts) if SSH is refused · `ssh`: never Telnet · `telnet`: always Telnet |
+| `ONT_TELNET_PORT` | `23` | Telnet port |
+| `ONT_ALLOW_PUBLIC_TELNET` | off | `1` lets Telnet go to a non-private address (not recommended) |
 
 ### Several ONTs: a JSON file
 
@@ -285,7 +288,18 @@ Copy [`ont.example.json`](ont.example.json) to `~/.config/ont-mcp/ont.json` (fou
 }
 ```
 
-Device fields: `host`, `user`, `port`, `label`, `keychain`, `password_file`, `password`, `read_only`, `prompt`. A typo such as `pasword` is reported clearly instead of failing silently.
+Device fields: `host`, `user`, `port`, `label`, `keychain`, `password_file`, `password`, `read_only`, `prompt`, `protocol`, `telnet_port`, `allow_public_telnet`. A typo such as `pasword` is reported clearly instead of failing silently.
+
+## 📡 Telnet fallback (for SSH-less ONTs)
+
+Some ONTs speak only Telnet. With `protocol: auto` (the default) the server tries SSH first, and **only if the ONT's SSH port refuses the connection** it uses Telnet instead.
+
+- **Telnet is unencrypted.** The password and every command cross your network in clear text. Use a password you don't reuse anywhere else.
+- **Private addresses only.** Telnet is refused for public IPs (`allow_public_telnet` overrides, but don't). The address is resolved once and the one that was checked is the one dialled.
+- **Never on other SSH failures.** A wrong password, an old-algorithm error or a changed host key does *not* fall back.
+- **Secrets only on request.** The username and password are sent only in answer to a `login:` / `Password:` prompt, with one attempt and no retries, so a bad password can't lock the account.
+- **Always visible.** Results say `Telnet, unencrypted`, and the approval dialog does too.
+- **Opt out:** `"protocol": "ssh"`. Force it: `"protocol": "telnet"`.
 
 The tools then take a `device` argument: *"check the office ONT"*.
 
@@ -317,7 +331,7 @@ Still stuck? Run `ont-mcp --check` and paste the output into an issue.
 <details>
 <summary><b>Why SSH and not the web page?</b></summary>
 
-The web login has a captcha, and the pages load the ONT's small memory heavily. The SSH CLI is fast, scriptable and gentle.
+The web login has a captcha, and the pages load the ONT's small memory heavily. The SSH CLI is fast, scriptable and gentle. If your ONT has no SSH, see the [Telnet fallback](#-telnet-fallback-for-ssh-less-onts).
 </details>
 
 <details>
